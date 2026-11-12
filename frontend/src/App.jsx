@@ -4,7 +4,7 @@ import {
   Printer, RefreshCw, AlertCircle, CheckCircle2, Layers, Lock, LogOut, Settings
 } from "lucide-react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
+const API_URL = import.meta.env.VITE_API_URL || "[https://TU-URL-DE-RENDER.onrender.com/api](https://TU-URL-DE-RENDER.onrender.com/api)";
 
 const REPORTES_LISTA = [
   { id: "consolidado", nombre: "7. Resumen Consolidado" },
