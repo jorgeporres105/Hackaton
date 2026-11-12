@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   BarChart3, FileSpreadsheet, Upload, ShieldCheck, Download,
   Printer, RefreshCw, AlertCircle, CheckCircle2, Layers, Lock, LogOut, Settings
+  MessageSquare, Send, X
 } from "lucide-react";
 
 const API_URL = "https://exb-presupuesto-api.onrender.com/api";
@@ -48,6 +49,37 @@ export default function App() {
   const [tcGestion, setTcGestion] = useState(2026);
   const [tcValor, setTcValor] = useState(6.96);
   const [msgTc, setMsgTc] = useState("");
+  
+  // Chatbot financiero
+const [chatAbierto, setChatAbierto] = useState(false);
+const [chatInput, setChatInput] = useState("");
+const [chatEnviando, setChatEnviando] = useState(false);
+const [mensajesChat, setMensajesChat] = useState([
+  {
+    autor: "bot",
+    texto: "¡Hola! Soy el Asistente Financiero EXB. Pregúntame por saldos, ejecución, porcentajes, financiadores o áreas."
+  }
+]);
+
+const enviarPreguntaChat = async (textoPregunta) => {
+  const pregunta = (textoPregunta || chatInput).trim();
+  if (!pregunta) return;
+  setMensajesChat((prev) => [...prev, { autor: "user", texto: pregunta }]);
+  setChatInput("");
+  setChatEnviando(true);
+  try {
+    const res = await fetch(`${API_URL}/chatbot`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pregunta, gestion: filtros.gestion, moneda: filtros.moneda }),
+    });
+    const data = await res.json();
+    setMensajesChat((prev) => [...prev, { autor: "bot", texto: data.respuesta || "No pude procesar la consulta." }]);
+  } catch {
+    setMensajesChat((prev) => [...prev, { autor: "bot", texto: "Error de conexión con el servidor." }]);
+  }
+  setChatEnviando(false);
+};
 
   const manejarLogin = async (e) => {
     e.preventDefault();
@@ -703,6 +735,78 @@ export default function App() {
           </div>
         )}
       </main>
+      {/* ==================== CHATBOT FLOTANTE ==================== */}
+<div className="fixed bottom-5 right-5 z-50 no-print">
+  {!chatAbierto ? (
+    <button
+      onClick={() => setChatAbierto(true)}
+      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-full shadow-lg font-semibold text-sm transition"
+    >
+      <MessageSquare className="w-5 h-5" /> Asistente IA
+    </button>
+  ) : (
+    <div className="w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+      <div className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="w-4 h-4 text-emerald-400" />
+          <span className="font-bold text-sm">Asistente Financiero EXB</span>
+        </div>
+        <button onClick={() => setChatAbierto(false)} className="text-slate-400 hover:text-white">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="p-3 h-64 overflow-y-auto space-y-2.5 bg-slate-50 text-xs">
+        {mensajesChat.map((m, i) => (
+          <div
+            key={i}
+            className={`p-2.5 rounded-xl max-w-[85%] leading-relaxed ${
+              m.autor === "user"
+                ? "bg-emerald-600 text-white ml-auto"
+                : "bg-white text-slate-800 border border-slate-200 shadow-sm"
+            }`}
+          >
+            {m.texto}
+          </div>
+        ))}
+        {chatEnviando && <p className="text-slate-400 italic">Consultando base de datos...</p>}
+      </div>
+
+      {/* Sugerencias rápidas de 1 clic */}
+      <div className="px-3 py-1.5 bg-white border-t border-slate-100 flex gap-1.5 overflow-x-auto">
+        {["¿Cuál es el saldo?", "Top financiadores", "% de avance"].map((sug) => (
+          <button
+            key={sug}
+            type="button"
+            onClick={() => enviarPreguntaChat(sug)}
+            className="shrink-0 text-[10px] bg-slate-100 hover:bg-emerald-50 text-slate-700 px-2 py-1 rounded-full border"
+          >
+            {sug}
+          </button>
+        ))}
+      </div>
+
+      <form
+        onSubmit={(e) => { e.preventDefault(); enviarPreguntaChat(); }}
+        className="p-2.5 bg-white border-t border-slate-200 flex gap-2"
+      >
+        <input
+          type="text"
+          value={chatInput}
+          onChange={(e) => setChatInput(e.target.value)}
+          placeholder="Escribe tu consulta..."
+          className="flex-1 text-xs border rounded-lg px-3 py-2 outline-none focus:border-emerald-500"
+        />
+        <button
+          type="submit"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-lg"
+        >
+          <Send className="w-4 h-4" />
+        </button>
+      </form>
+    </div>
+  )}
+</div>
     </div>
   );
 }

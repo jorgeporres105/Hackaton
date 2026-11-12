@@ -6,6 +6,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .database import get_db
 from . import models, etl_excel, reports
+import unicodedata
+
+class ChatQuery(BaseModel):
+    pregunta: str
+    gestion: int = 2026
+    moneda: str = "BOB"
+
+def _normalizar(texto: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto.lower())
+        if unicodedata.category(c) != "Mn"
+    )
 
 app = FastAPI(title="Sistema de Control Presupuestario - EXB")
 
@@ -195,4 +207,60 @@ def ver_auditoria(db: Session = Depends(get_db)):
                 "usuario": usuarios.get(l.usuario_id, "Sistema")
             } for l in logs
         ]
+    }
+@app.post("/api/chatbot")
+def consultar_chatbot(data: ChatQuery, db: Session = Depends(get_db)):
+    q = _normalizar(data.pregunta)
+    moneda = "USD" if ("dolar" in q or "usd" in q or "$" in q) else data.moneda
+
+    # Detectar si pregunta por algún financiador, área, región o rubro específico
+    fin_id = next((f.id for f in db.query(models.Financiador).all() if _normalizar(f.nombre) in q), None)
+    area_id = next((a.id for a in db.query(models.Area).all() if _normalizar(a.nombre) in q), None)
+    reg_id = next((r.id for r in db.query(models.Region).all() if _normalizar(r.nombre) in q), None)
+    rubro_id = next((rb.id for rb in db.query(models.Rubro).all() if _normalizar(rb.nombre) in q), None)
+
+    rep = reports.generar_reporte(
+        db, "consolidado", data.gestion, fin_id, reg_id, area_id, rubro_id, None, moneda, False
+    )["resumen"]
+
+    # Respuestas específicas según intención
+    if "mayor" in q or "top" in q or "mas gasto" in q or "mas ejecucion" in q:
+        if "financiador" in q or "fondo" in q:
+            filas = reports.generar_reporte(db, "financiador", data.gestion, None, None, None, None, None, moneda)["filas"]
+            top = sorted(filas, key=lambda x: x["ejecutado"], reverse=True)[:3]
+            detalle = ", ".join([f"{x['financiador']} ({x['ejecutado']:,.2f} {moneda})" for x in top])
+            return {"respuesta": f"Los financiadores con mayor ejecución en {data.gestion} son: {detalle}."}
+        if "area" in q:
+            filas = reports.generar_reporte(db, "area_financiador", data.gestion, None, None, None, None, None, moneda)["filas"]
+            top = sorted(filas, key=lambda x: x["ejecutado"], reverse=True)[:3]
+            detalle = ", ".join([f"{x['area']} ({x['ejecutado']:,.2f} {moneda})" for x in top])
+            return {"respuesta": f"Las áreas con mayor ejecución en {data.gestion} son: {detalle}."}
+        filas = reports.generar_reporte(db, "rubro_cuenta", data.gestion, None, None, None, None, None, moneda)["filas"]
+        top = sorted(filas, key=lambda x: x["ejecutado"], reverse=True)[:3]
+        detalle = ", ".join([f"{x['cuenta']} ({x['ejecutado']:,.2f} {moneda})" for x in top])
+        return {"respuesta": f"Las cuentas con mayor ejecución en {data.gestion} son: {detalle}."}
+
+    if "saldo" in q or "disponible" in q or "queda" in q or "sobra" in q:
+        return {
+            "respuesta": f"Para la gestión {data.gestion} (en {moneda}), el saldo disponible es de {rep['saldo']:,.2f} {moneda} (de un presupuesto vigente de {rep['presupuesto_vigente']:,.2f} {moneda})."
+        }
+
+    if "porcentaje" in q or "avance" in q or "%" in q:
+        return {
+            "respuesta": f"El avance de ejecución en {data.gestion} es del {rep['porcentaje_ejecucion']}% ({rep['ejecutado']:,.2f} {moneda} ejecutados sobre {rep['presupuesto_vigente']:,.2f} {moneda} vigentes)."
+        }
+
+    if "presupuesto" in q and ("ejecut" not in q and "gast" not in q):
+        return {
+            "respuesta": f"El presupuesto vigente para {data.gestion} es de {rep['presupuesto_vigente']:,.2f} {moneda} (Inicial: {rep['presupuesto_inicial']:,.2f} {moneda})."
+        }
+
+    # Resumen completo por defecto (sirve para preguntas generales o filtradas por nombre)
+    return {
+        "respuesta": (
+            f"Resumen Gestión {data.gestion} ({moneda}): "
+            f"Presupuesto Vigente: {rep['presupuesto_vigente']:,.2f} | "
+            f"Ejecutado: {rep['ejecutado']:,.2f} ({rep['porcentaje_ejecucion']}%) | "
+            f"Saldo Disponible: {rep['saldo']:,.2f} {moneda}."
+        )
     }
