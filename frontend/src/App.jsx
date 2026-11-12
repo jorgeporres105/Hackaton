@@ -191,8 +191,10 @@ const enviarPreguntaChat = async (textoPregunta) => {
 
   useEffect(() => { if (usuarioActivo) cargarCatalogos(); }, [usuarioActivo]);
   useEffect(() => { cargarDatos(); }, [filtros, tipoReporte, usuarioActivo]);
-  useEffect(() => { if (vista === "auditoria") cargarAuditoria(); }, [vista]);
-
+  useEffect(() => {
+    if (vista === "auditoria") cargarAuditoria();
+    if (vista === "admin" && usuarioActivo?.rol === "admin") cargarUsuarios();
+  }, [vista, usuarioActivo]);
   const manejarImportacion = async (e) => {
     e.preventDefault();
     if (!archivoExcel) return;
