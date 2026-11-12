@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .database import get_db
@@ -16,22 +17,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class TipoCambioUpdate(BaseModel):
+    gestion: int
+    tasa: float
+    usuario_id: int
+
 @app.get("/api/health")
 def health_check(db: Session = Depends(get_db)):
     db.execute(text("SELECT 1"))
     return {"status": "ok", "database": "conectada correctamente"}
 
-# 1. IMPORTAR EXCEL (Con control de rol y auditoría)
+# 0. LOGIN CON CONTRASEÑA
+@app.post("/api/login")
+def login(creds: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(models.Usuario).filter(
+        models.Usuario.email == creds.email,
+        models.Usuario.password_hash == creds.password,
+        models.Usuario.activo == True
+    ).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos.")
+
+    db.add(models.Auditoria(
+        usuario_id=user.id,
+        accion="INICIO_SESION",
+        detalle=f"Ingreso al sistema con rol {user.rol.upper()}"
+    ))
+    db.commit()
+
+    return {
+        "id": user.id,
+        "nombre": user.nombre,
+        "email": user.email,
+        "rol": user.rol
+    }
+
+# 1. IMPORTAR EXCEL (SOLO ADMIN)
 @app.post("/api/importar")
 async def importar_archivo(
     file: UploadFile = File(...),
     gestion: int = Form(2026),
-    usuario_id: int = Form(1),
+    usuario_id: int = Form(...),
     db: Session = Depends(get_db)
 ):
     usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id).first()
-    if usuario and usuario.rol == "consulta":
-        raise HTTPException(status_code=403, detail="El rol Consulta no tiene permisos para importar datos.")
+    if not usuario or usuario.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado: Solo un Administrador puede importar datos.")
 
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx o .xls)")
@@ -39,6 +74,34 @@ async def importar_archivo(
     contenido = await file.read()
     resultado = etl_excel.procesar_excel_exb(contenido, file.filename, gestion, usuario_id, db)
     return {"mensaje": "Importación completada con éxito", "detalle": resultado}
+
+# 1.5 ACTUALIZAR TIPO DE CAMBIO (SOLO ADMIN)
+@app.get("/api/tipos-cambio")
+def listar_tipos_cambio(db: Session = Depends(get_db)):
+    tcs = db.query(models.TipoCambio).filter(models.TipoCambio.mes == 1).all()
+    return [{"gestion": t.gestion, "tasa": t.tasa} for t in tcs]
+
+@app.put("/api/tipos-cambio")
+def actualizar_tipo_cambio(data: TipoCambioUpdate, db: Session = Depends(get_db)):
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == data.usuario_id).first()
+    if not usuario or usuario.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado: Solo el Administrador puede modificar el tipo de cambio.")
+
+    registros = db.query(models.TipoCambio).filter(models.TipoCambio.gestion == data.gestion).all()
+    if not registros:
+        for m in range(1, 13):
+            db.add(models.TipoCambio(gestion=data.gestion, mes=m, tasa=data.tasa))
+    else:
+        for r in registros:
+            r.tasa = data.tasa
+
+    db.add(models.Auditoria(
+        usuario_id=usuario.id,
+        accion="MODIFICACION_TC",
+        detalle=f"Tipo de cambio Gestión {data.gestion} actualizado a {data.tasa} Bs/USD"
+    ))
+    db.commit()
+    return {"mensaje": f"Tipo de cambio {data.gestion} actualizado a {data.tasa}"}
 
 # 2. CATÁLOGOS PARA FILTROS COMBINADOS
 @app.get("/api/filtros")
@@ -52,7 +115,6 @@ def obtener_filtros(db: Session = Depends(get_db)):
         "regiones": [{"id": r.id, "nombre": r.nombre} for r in db.query(models.Region).all()],
         "areas": [{"id": a.id, "nombre": a.nombre} for a in db.query(models.Area).all()],
         "rubros": [{"id": r.id, "nombre": r.nombre} for r in db.query(models.Rubro).all()],
-        "usuarios": [{"id": u.id, "nombre": u.nombre, "rol": u.rol} for u in db.query(models.Usuario).all()],
     }
 
 # 3. MOTOR DE LOS 7 REPORTES + DASHBOARD
