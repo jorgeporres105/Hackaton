@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   BarChart3, FileSpreadsheet, Upload, ShieldCheck, Download,
   Printer, RefreshCw, AlertCircle, CheckCircle2, Layers, Lock, LogOut, Settings,
-  MessageSquare, Send, X
+  MessageSquare, Send, X, Trash2
 } from "lucide-react";
 
 const API_URL = "https://exb-presupuesto-api.onrender.com/api";
@@ -70,6 +70,24 @@ const crearUsuario = async (e) => {
   } else {
     setMsgUsuario(data.detail || "Error al crear usuario");
   }
+};
+
+const [listaUsuarios, setListaUsuarios] = useState([]);
+
+const cargarUsuarios = async () => {
+  if (!esAdmin) return;
+  const res = await fetch(`${API_URL}/usuarios`);
+  if (res.ok) setListaUsuarios(await res.json());
+};
+
+const eliminarUsuario = async (userId, nombre) => {
+  if (!window.confirm(`¿Revocar el acceso al sistema para ${nombre}?`)) return;
+  const res = await fetch(`${API_URL}/usuarios/${userId}?admin_id=${usuarioActivo.id}`, {
+    method: "DELETE"
+  });
+  const data = await res.json();
+  setMsgUsuario(data.mensaje || data.detail);
+  cargarUsuarios();
 };
   
   // Chatbot financiero
@@ -602,7 +620,7 @@ const enviarPreguntaChat = async (textoPregunta) => {
           </div>
         )}
 
-        {/* ==================== VISTA 3: ADMINISTRACIÓN (SOLO ADMIN) ==================== */}
+{/* ==================== VISTA 3: ADMINISTRACIÓN (SOLO ADMIN) ==================== */}
         {vista === "admin" && (
           <div className="max-w-5xl mx-auto">
             {!esAdmin ? (
@@ -617,144 +635,183 @@ const enviarPreguntaChat = async (textoPregunta) => {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* 1. CARGA DE EXCEL */}
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-emerald-600" /> Importar Excel Contable
-                  </h2>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Sube la hoja <strong>BD</strong> para cargar presupuestos y ejecución de una gestión.
-                  </p>
-                  <form onSubmit={manejarImportacion} className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Gestión (Año)</label>
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* 1. CARGA DE EXCEL */}
+                  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-emerald-600" /> Importar Excel Contable
+                    </h2>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Sube la hoja <strong>BD</strong> para cargar presupuestos y ejecución de una gestión.
+                    </p>
+                    <form onSubmit={manejarImportacion} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Gestión (Año)</label>
+                        <input
+                          type="number"
+                          value={gestionImportar}
+                          onChange={(e) => setGestionImportar(Number(e.target.value))}
+                          className="w-full border rounded-lg px-3 py-2 text-sm"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Archivo Excel (.xlsx)</label>
+                        <input
+                          type="file"
+                          accept=".xlsx,.xls"
+                          onChange={(e) => setArchivoExcel(e.target.files[0])}
+                          className="w-full border rounded-lg px-3 py-2 text-xs bg-slate-50"
+                          required
+                        />
+                      </div>
+                      <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm">
+                        Importar Datos
+                      </button>
+                    </form>
+                    {msgImport && (
+                      <div className={`mt-4 p-3 rounded-lg text-xs flex items-center gap-2 ${
+                        msgImport.tipo === "ok" ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-800 border border-red-200"
+                      }`}>
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>{msgImport.texto}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. CONFIGURACIÓN DE TIPO DE CAMBIO */}
+                  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-indigo-600" /> Tipo de Cambio Oficial (BOB/USD)
+                    </h2>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Ajusta la tasa de conversión para los reportes expresados en dólares (USD).
+                    </p>
+                    <form onSubmit={actualizarTipoCambio} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Gestión</label>
+                        <input
+                          type="number"
+                          value={tcGestion}
+                          onChange={(e) => setTcGestion(e.target.value)}
+                          className="w-full border rounded-lg px-3 py-2 text-sm"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Tasa de Cambio (Bs por 1 USD)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={tcValor}
+                          onChange={(e) => setTcValor(e.target.value)}
+                          className="w-full border rounded-lg px-3 py-2 text-sm"
+                          required
+                        />
+                      </div>
+                      <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg text-sm">
+                        Guardar Tipo de Cambio
+                      </button>
+                    </form>
+                    {msgTc && (
+                      <p className="mt-4 p-3 rounded-lg text-xs bg-indigo-50 text-indigo-800 border border-indigo-200">{msgTc}</p>
+                    )}
+                  </div>
+
+                  {/* 3. CREACIÓN DE USUARIOS */}
+                  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" /> Registrar Nuevo Usuario
+                    </h2>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Asigna credenciales y nivel de acceso institucional.
+                    </p>
+                    <form onSubmit={crearUsuario} className="space-y-3">
                       <input
-                        type="number"
-                        value={gestionImportar}
-                        onChange={(e) => setGestionImportar(Number(e.target.value))}
-                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                        type="text"
+                        placeholder="Nombre completo"
+                        value={nuevoUsuario.nombre}
+                        onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-xs"
                         required
                       />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Archivo Excel (.xlsx)</label>
                       <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={(e) => setArchivoExcel(e.target.files[0])}
-                        className="w-full border rounded-lg px-3 py-2 text-xs bg-slate-50"
+                        type="email"
+                        placeholder="Correo institucional"
+                        value={nuevoUsuario.email}
+                        onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-xs"
                         required
                       />
-                    </div>
-                    <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm">
-                      Importar Datos
-                    </button>
-                  </form>
-                  {msgImport && (
-                    <div className={`mt-4 p-3 rounded-lg text-xs flex items-center gap-2 ${
-                      msgImport.tipo === "ok" ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-800 border border-red-200"
-                    }`}>
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>{msgImport.texto}</span>
-                    </div>
-                  )}
+                      <input
+                        type="password"
+                        placeholder="Contraseña"
+                        value={nuevoUsuario.password}
+                        onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-xs"
+                        required
+                      />
+                      <select
+                        value={nuevoUsuario.rol}
+                        onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-xs bg-slate-50 font-semibold"
+                      >
+                        <option value="tecnico">Rol: Técnico (Solo lectura)</option>
+                        <option value="consulta">Rol: Consulta (Solo lectura)</option>
+                        <option value="admin">Rol: Administrador (Acceso total)</option>
+                      </select>
+                      <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-lg text-xs">
+                        Crear Usuario
+                      </button>
+                    </form>
+                    {msgUsuario && (
+                      <p className="mt-3 p-2.5 rounded-lg text-xs bg-emerald-50 text-emerald-800 border border-emerald-200">{msgUsuario}</p>
+                    )}
+                  </div>
                 </div>
 
-                {/* 2. CONFIGURACIÓN DE TIPO DE CAMBIO */}
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
-                    <Settings className="w-4 h-4 text-indigo-600" /> Tipo de Cambio Oficial (BOB/USD)
-                  </h2>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Ajusta la tasa de conversión para los reportes expresados en dólares (USD).
-                  </p>
-                  <form onSubmit={actualizarTipoCambio} className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Gestión</label>
-                      <input
-                        type="number"
-                        value={tcGestion}
-                        onChange={(e) => setTcGestion(e.target.value)}
-                        className="w-full border rounded-lg px-3 py-2 text-sm"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Tasa de Cambio (Bs por 1 USD)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={tcValor}
-                        onChange={(e) => setTcValor(e.target.value)}
-                        className="w-full border rounded-lg px-3 py-2 text-sm"
-                        required
-                      />
-                    </div>
-                    <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg text-sm">
-                      Guardar Tipo de Cambio
-                    </button>
-                  </form>
-                  {msgTc && (
-                    <p className="mt-4 p-3 rounded-lg text-xs bg-indigo-50 text-indigo-800 border border-indigo-200">{msgTc}</p>
-                  )}
+                {/* 4. LISTA DE USUARIOS ACTIVOS CON OPCIÓN DE REVOCAR ACCESO */}
+                <div className="mt-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <h3 className="text-base font-bold text-slate-900 mb-3">Usuarios Activos en el Sistema</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead>
+                        <tr className="border-b bg-slate-50 text-slate-600 uppercase">
+                          <th className="py-2.5 px-3">Nombre</th>
+                          <th className="py-2.5 px-3">Correo Institucional</th>
+                          <th className="py-2.5 px-3">Rol</th>
+                          <th className="py-2.5 px-3 text-right">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {listaUsuarios.map((u) => (
+                          <tr key={u.id} className="hover:bg-slate-50">
+                            <td className="py-2.5 px-3 font-medium text-slate-800">{u.nombre}</td>
+                            <td className="py-2.5 px-3 text-slate-600">{u.email}</td>
+                            <td className="py-2.5 px-3 uppercase font-bold text-indigo-600">{u.rol}</td>
+                            <td className="py-2.5 px-3 text-right">
+                              {u.id !== usuarioActivo.id ? (
+                                <button
+                                  onClick={() => eliminarUsuario(u.id, u.nombre)}
+                                  className="inline-flex items-center gap-1 text-red-600 hover:bg-red-50 px-2.5 py-1 rounded border border-red-200 font-semibold transition"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" /> Dar de baja
+                                </button>
+                              ) : (
+                                <span className="text-slate-400 italic">Sesión actual</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-
-                {/* 3. CREACIÓN DE USUARIOS */}
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" /> Registrar Nuevo Usuario
-                  </h2>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Asigna credenciales y nivel de acceso institucional.
-                  </p>
-                  <form onSubmit={crearUsuario} className="space-y-3">
-                    <input
-                      type="text"
-                      placeholder="Nombre completo"
-                      value={nuevoUsuario.nombre}
-                      onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })}
-                      className="w-full border rounded-lg px-3 py-2 text-xs"
-                      required
-                    />
-                    <input
-                      type="email"
-                      placeholder="Correo institucional"
-                      value={nuevoUsuario.email}
-                      onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })}
-                      className="w-full border rounded-lg px-3 py-2 text-xs"
-                      required
-                    />
-                    <input
-                      type="password"
-                      placeholder="Contraseña"
-                      value={nuevoUsuario.password}
-                      onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })}
-                      className="w-full border rounded-lg px-3 py-2 text-xs"
-                      required
-                    />
-                    <select
-                      value={nuevoUsuario.rol}
-                      onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })}
-                      className="w-full border rounded-lg px-3 py-2 text-xs bg-slate-50 font-semibold"
-                    >
-                      <option value="tecnico">Rol: Técnico (Solo lectura)</option>
-                      <option value="consulta">Rol: Consulta (Solo lectura)</option>
-                      <option value="admin">Rol: Administrador (Acceso total)</option>
-                    </select>
-                    <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-lg text-xs">
-                      Crear Usuario
-                    </button>
-                  </form>
-                  {msgUsuario && (
-                    <p className="mt-3 p-2.5 rounded-lg text-xs bg-emerald-50 text-emerald-800 border border-emerald-200">{msgUsuario}</p>
-                  )}
-                </div>
-              </div>
+              </>
             )}
           </div>
         )}
-
         {/* ==================== VISTA 4: AUDITORÍA ==================== */}
         {vista === "auditoria" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

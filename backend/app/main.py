@@ -151,6 +151,35 @@ def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db)):
     ))
     db.commit()
     return {"mensaje": f"Usuario {data.nombre} creado exitosamente con rol {data.rol}."}
+    
+# 1.9 LISTAR USUARIOS ACTIVOS
+@app.get("/api/usuarios")
+def listar_usuarios(db: Session = Depends(get_db)):
+    usuarios = db.query(models.Usuario).filter(models.Usuario.activo == True).all()
+    return [{"id": u.id, "nombre": u.nombre, "email": u.email, "rol": u.rol} for u in usuarios]
+
+# 1.10 DAR DE BAJA / ELIMINAR ACCESO DE USUARIO (SOLO ADMIN)
+@app.delete("/api/usuarios/{user_id}")
+def eliminar_usuario(user_id: int, admin_id: int, db: Session = Depends(get_db)):
+    admin = db.query(models.Usuario).filter(models.Usuario.id == admin_id).first()
+    if not admin or admin.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado: Solo un Administrador puede eliminar usuarios.")
+
+    if user_id == admin_id:
+        raise HTTPException(status_code=400, detail="No puedes eliminar tu propia cuenta activa.")
+
+    objetivo = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
+    if not objetivo:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    objetivo.activo = False
+    db.add(models.Auditoria(
+        usuario_id=admin.id,
+        accion="BAJA_USUARIO",
+        detalle=f"Acceso revocado para '{objetivo.nombre}' ({objetivo.email})"
+    ))
+    db.commit()
+    return {"mensaje": f"Acceso eliminado para {objetivo.nombre}."}
 
 # 2. CATÁLOGOS PARA FILTROS COMBINADOS
 @app.get("/api/filtros")
