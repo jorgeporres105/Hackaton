@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   BarChart3, FileSpreadsheet, Upload, ShieldCheck, Download,
-  Printer, RefreshCw, AlertCircle, CheckCircle2, Layers, Lock, LogOut, Settings
+  Printer, RefreshCw, AlertCircle, CheckCircle2, Layers, Lock, LogOut, Settings,
   MessageSquare, Send, X
 } from "lucide-react";
 
