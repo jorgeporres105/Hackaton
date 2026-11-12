@@ -50,6 +50,28 @@ export default function App() {
   const [tcValor, setTcValor] = useState(6.96);
   const [msgTc, setMsgTc] = useState("");
   
+  const [nuevoUsuario, setNuevoUsuario] = useState({
+  nombre: "", email: "", password: "", rol: "tecnico"
+});
+const [msgUsuario, setMsgUsuario] = useState("");
+
+const crearUsuario = async (e) => {
+  e.preventDefault();
+  setMsgUsuario("");
+  const res = await fetch(`${API_URL}/usuarios`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...nuevoUsuario, admin_id: usuarioActivo.id })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    setMsgUsuario(data.mensaje);
+    setNuevoUsuario({ nombre: "", email: "", password: "", rol: "tecnico" });
+  } else {
+    setMsgUsuario(data.detail || "Error al crear usuario");
+  }
+};
+  
   // Chatbot financiero
 const [chatAbierto, setChatAbierto] = useState(false);
 const [chatInput, setChatInput] = useState("");
@@ -582,7 +604,7 @@ const enviarPreguntaChat = async (textoPregunta) => {
 
         {/* ==================== VISTA 3: ADMINISTRACIÓN (SOLO ADMIN) ==================== */}
         {vista === "admin" && (
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-5xl mx-auto">
             {!esAdmin ? (
               <div className="bg-white p-8 rounded-xl border border-amber-200 shadow-sm text-center space-y-3">
                 <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto">
@@ -595,7 +617,7 @@ const enviarPreguntaChat = async (textoPregunta) => {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* 1. CARGA DE EXCEL */}
                 <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                   <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
@@ -675,6 +697,57 @@ const enviarPreguntaChat = async (textoPregunta) => {
                   </form>
                   {msgTc && (
                     <p className="mt-4 p-3 rounded-lg text-xs bg-indigo-50 text-indigo-800 border border-indigo-200">{msgTc}</p>
+                  )}
+                </div>
+
+                {/* 3. CREACIÓN DE USUARIOS */}
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" /> Registrar Nuevo Usuario
+                  </h2>
+                  <p className="text-xs text-slate-500 mb-4">
+                    Asigna credenciales y nivel de acceso institucional.
+                  </p>
+                  <form onSubmit={crearUsuario} className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Nombre completo"
+                      value={nuevoUsuario.nombre}
+                      onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2 text-xs"
+                      required
+                    />
+                    <input
+                      type="email"
+                      placeholder="Correo institucional"
+                      value={nuevoUsuario.email}
+                      onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2 text-xs"
+                      required
+                    />
+                    <input
+                      type="password"
+                      placeholder="Contraseña"
+                      value={nuevoUsuario.password}
+                      onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2 text-xs"
+                      required
+                    />
+                    <select
+                      value={nuevoUsuario.rol}
+                      onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2 text-xs bg-slate-50 font-semibold"
+                    >
+                      <option value="tecnico">Rol: Técnico (Solo lectura)</option>
+                      <option value="consulta">Rol: Consulta (Solo lectura)</option>
+                      <option value="admin">Rol: Administrador (Acceso total)</option>
+                    </select>
+                    <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-lg text-xs">
+                      Crear Usuario
+                    </button>
+                  </form>
+                  {msgUsuario && (
+                    <p className="mt-3 p-2.5 rounded-lg text-xs bg-emerald-50 text-emerald-800 border border-emerald-200">{msgUsuario}</p>
                   )}
                 </div>
               </div>

@@ -68,6 +68,7 @@ def login(creds: LoginRequest, db: Session = Depends(get_db)):
         "rol": user.rol
     }
 
+
 # 1. IMPORTAR EXCEL (SOLO ADMIN)
 @app.post("/api/importar")
 async def importar_archivo(
@@ -114,6 +115,42 @@ def actualizar_tipo_cambio(data: TipoCambioUpdate, db: Session = Depends(get_db)
     ))
     db.commit()
     return {"mensaje": f"Tipo de cambio {data.gestion} actualizado a {data.tasa}"}
+class UsuarioCreate(BaseModel):
+    nombre: str
+    email: str
+    password: str
+    rol: str  # "admin", "tecnico" o "consulta"
+    admin_id: int
+
+# 1.8 CREAR NUEVO USUARIO (SOLO ADMIN)
+@app.post("/api/usuarios")
+def crear_usuario(data: UsuarioCreate, db: Session = Depends(get_db)):
+    admin = db.query(models.Usuario).filter(models.Usuario.id == data.admin_id).first()
+    if not admin or admin.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado: Solo un Administrador puede crear usuarios.")
+
+    if data.rol not in ["admin", "tecnico", "consulta"]:
+        raise HTTPException(status_code=400, detail="Rol inválido. Use admin, tecnico o consulta.")
+
+    existe = db.query(models.Usuario).filter(models.Usuario.email == data.email).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="Ese correo ya está registrado.")
+
+    nuevo = models.Usuario(
+        nombre=data.nombre,
+        email=data.email,
+        password_hash=data.password,
+        rol=data.rol,
+        activo=True
+    )
+    db.add(nuevo)
+    db.add(models.Auditoria(
+        usuario_id=admin.id,
+        accion="CREACION_USUARIO",
+        detalle=f"Usuario '{data.nombre}' ({data.email}) creado con rol {data.rol.upper()}"
+    ))
+    db.commit()
+    return {"mensaje": f"Usuario {data.nombre} creado exitosamente con rol {data.rol}."}
 
 # 2. CATÁLOGOS PARA FILTROS COMBINADOS
 @app.get("/api/filtros")
